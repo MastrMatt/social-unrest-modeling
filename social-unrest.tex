@@ -1,0 +1,167 @@
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+
+\title{Modeling Social Unrest in Canada}
+\author{Matthew Neba}
+\date{April 1, 2024}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+    The goal of this project is to choose an appropriate generalized linear model(GLM)  to capture the relationship between some independent variables and a single dependent variable. The independent variables are: year, month, Canadian provinces and population. The dependent variable is the number of protests to have been recorded. Once the GLM has been chosen, regression would be performed to obtain the parameters of the model.
+
+    Once the parameters of the model have been determined, bootstrap methods will be used to construct a confidence interval for the model parameters. This will help determine the significance of the model parameters. 
+
+Finally, the model parameters would then be used to simulate Monte Carlo protests for the year of 2025. 
+\section{Model Selection}
+
+    The number of protests that can occur is a count. Therefore, an appropriate model would be able to model count data. Some natural model choices would be a Poisson, negative binomial or a zero inflated model. Further analysis was performed on the data to determine a model to use. During analysis of the data, It was discovered that approximately 15 \% of the data points were zero. This suggested that some zero-inflated model would likely be a good choice. However, over dispersion of count data can possibly to occur. Since a Poisson distribution assumes:
+\[ E[x] = \text{Var}[x], \] 
+
+    The negative binomial model would be an excellent choice since it can account for this over dispersion of the data. Here is the relationship between the expected value and variance for the negative binomial distribution: 
+
+\[ E[x] = \mu, \quad \text{Var}[x] = \mu + \alpha \mu^2 \]
+
+where \(\alpha\) represents the over dispersion parameter in the nb2 parametrization of the negative binomial distribution. Since this parameter can be 0, it also accounts for the case where there is no over dispersion present in the data. Optimally, A zero inflated negative binomial model would have been used. This would handle both zero-inflated data and over dispersed data. However, for simplicity a negative binomial distribution was used instead. 
+
+
+\section{GLM Regression}
+    To perform negative binomial regression, Several steps where taken. Firstly, the data had to be  processed so that regression could be properly done in python. The year variable contained values: \( \text{Year} \in \{2022, 2023\} \). This was converted to be \( \text{Year} \in \{1, 2\} \). This conversion also served the additional purpose of allowing Monte Carlo simulations for the year 2025 by incrementing the year value. Similarly, the month variable was converted to be \( \text{Month} \in \{0,1,2,...,11\} \). Since there is no innate ordering of the provinces, the provinces were instead converted to dummy variables. These variables could take the value of \( \ \{0,1\} \) depending on whether or not the protest occurred in the related province.
+
+    A common problem that arises in Regression when using dummy variables is the dummy variable trap. The dummy variable trap occurs when a dummy variable is created for each category of a categorical variable. This can lead to multicollinearity. Since the model assumes the independent variables are indeed independent, this can lead to regression errors in the model. This trap was avoided by excluding one province from being turned into a dummy variable.
+
+    Negative binomial regression was performed using the statsmodel.api library from python. This library performs regression by using the iterative re weighted least squares method to maximize the likelihood of the data for some set of parameters. The logarithmic function is also used to link the mean: \(\mu\) of the negative binomial distribution with the parameters of the GLM.
+
+    An issue with GLM regression with the negative binomial model in python using the statsmodel.api is that the library does not determine the over dispersion parameter for the negative binomial distribution when it performs regression. Therefore, the over dispersion parameter had to be obtained in with some other algorithm. 
+
+    A simple line search algorithm for the over dispersion parameter \(\alpha\)   from 0.05 to 20 was performed. This was accomplished by performing regression on the data using the various \(\alpha\)'s. The \(\alpha\) that obtained the greatest log-likelihood was then chosen as the over dispersion parameter.
+
+\section{Bootstrap Methods}
+% Explain how bootstrap methods were used to determine the most significant model parameters and their impact on protests.
+
+    After the parameters for the GLM with the optimal alpha was determined through regression, The next goal was to derive the necessary formulas to perform parametric bootstrapping. The negative binomial model is parameterized by :  \[\ Protests \sim \text{Negative Binomial}(r, p) \]
+
+    Firstly, since the log function was used as the link during regression, here is the relationship between the model parameters, E[Protests] and Var[Protests]:
+$$
+  \ E[Protests] = \mu = \text{exp}\left(\beta_0 + \beta_1 (\mathrm{year}) + \beta_2 (\mathrm{month}) + \beta_3 (\mathrm{prov}) + \beta_4 (\mathrm{pop})\right)
+$$
+
+\[Var[Protests] = \sigma^2 = \mu + \alpha \mu^2 \]
+
+    The variance equation originates from the fact that the statsmodels.api library uses nb2 parametrization for the negative binomial regression model. Having obtained the mean and variance from regression, this values can be corresponded to the mean and variance of the negative binomial distribution:
+\[\mu = \frac{r \cdot (1-p)}{p}\]
+\[\sigma^2 = \frac{r \cdot (1-p)}{p^2}\]
+
+solving for p and r gives: 
+\[p = \frac{\mu}{\mu + \alpha \mu^2}\]
+\[r = \frac{p \cdot \mu }{1 - p}\]
+
+    After p and r were obtained, 5000 parametric bootstrap samples were then created for all the combinations of the independent variables found in the original dataset. This was done through the numpy module in python which allows sampling from the negative binomial distribution. 
+
+After these bootstrap samples were obtained, GLM regression was then performed on each bootstrap sample to obtain the model parameters. This was repeated for each bootstrap sample to obtain 5000 bootstrapped model parameters. The top and bottom 2.5\% of these bootstrapped model parameters were then cut off to produce a 95\% bootstrapped confidence interval for the model parameters.
+
+    Significance of the model parameters was determined by observing whether 0 was contained in the 95\% CI for each model parameter. If 0 was contained within the interval, this suggested that the independent variable linked to the specific model parameter may be insignificant in determining the E[protests] and thereby, in determining the number of protests. 
+
+Recall: 
+$$
+  \ E[Protests] = \mu = \text{exp}\left(\beta_0 + \beta_1 (\mathrm{year}) + \beta_2 (\mathrm{month}) + \beta_3 (\mathrm{prov}) + \beta_4 (\mathrm{pop})\right)
+$$
+, therefore, a one unit increase in the i'th independent variable will increase the E[protests] by a factor of:
+
+\begin{equation*}
+\begin{aligned}
+& e^{\beta_i} \\
+\end{aligned}
+\end{equation*}
+
+where \(\beta_i\) is the corresponding model parameter for the independent variable.
+
+\section{Monte Carlo Simulation}
+
+    After the model parameters were obtained, Monte Carlo simulation for the year 2025 could be done. 
+
+    Firstly, since the population for the year 2025 is unknown, the population for the year 2022 was used for each combination of month and province. Then, since the year independent variable was modeled as an integer to perform regression, the year variable was incremented from 1 to 4 to represent a 3 year jump from 2022 to 2025.   
+
+    After the proper combinations of month,province and population were calculated, these independent variable combinations were used to then calculate the p and r parameters for the negative binomial distribution corresponding to that particular combination, analogous to the process in bootstrap methods but using the model parameters obtained during GLM regression on the original dataset. Since:
+
+\[\ Protests \sim \text{Negative Binomial}(r, p) \]
+
+, these p and r parameters were used to create 5000 Monte Carlo samples for the combinations of the independent variables. Once these samples were created, the top and bottom 2.5\% of the the samples were removed to create a 95 \% CI for the year of 2025. 
+
+
+\section{Results}
+
+\subsection{Model Results}
+
+The results of the negative binomial regression model are summarized in figure \ref{fig:model_results}. 
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\linewidth]{stat413modelResults.png}
+    \caption{Model Results}
+    \label{fig:model_results}
+\end{figure}
+
+Figure \ref{fig:model_results} illustrates the model parameters and some of their properties obtained by GLM regression in python
+
+\subsection{Bootstrapped CI}
+
+A 95\% confidence interval for the model parameters is displayed in figure \ref{fig:coefficients}.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\linewidth]{stat413coefficients.png}
+    \caption{95\% CI for Model Parameters}
+    \label{fig:coefficients}
+\end{figure}
+
+The length of the vertical lines for each model parameter represents the width of the confidence interval. If the vertical lines crosses 0, this suggests 0 is contained in the CI for the model parameter and therefore, the model parameter is insignificant.
+
+Here are independent variables corresponding to the model parameters that were found to be significant: 
+\[\text{Population}\]
+\[\text{Province} \in \{ \text{MB, NB, NL, NS, ON, PE, QC, SK, YT} \}\]
+
+\subsection{Monte Carlo Simulation for 2025}
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\linewidth]{stat413MonteCarlo.png}
+    \caption{Monte Carlo Simulation for 2025}
+    \label{fig:monte_carlo}
+\end{figure}
+
+Figure \ref{fig:monte_carlo} shows the 95\% confidence interval for the expected number of protests in 2025. The simulation took into account the population and other variables to predict potential protest numbers for the future.
+
+
+\section{Conclusion}
+
+In conclusion, this study aimed to model social unrest in Canada using a negative binomial regression approach. Here are the main findings and their significance:
+
+\subsection{Model Selection}
+The negative binomial model was chosen due to its ability to handle count data with over dispersion, which was observed in the dataset. While a zero-inflated model could have been used for additional complexity, the negative binomial model provided a robust choice.
+
+\subsection{GLM Regression}
+The negative binomial regression was performed, with the model parameters obtained through iterative reweighed least squares. An additional step was taken to find the optimal over dispersion parameter, ensuring the model's accuracy.
+
+\subsection{Bootstrap Methods}
+Bootstrap methods were employed to determine the most significant model parameters and their impact on protests. By creating 5000 parametric bootstrap samples, confidence intervals for the model parameters were obtained. Significant variables included population and specific provinces.
+
+\subsection{Monte Carlo Simulation}
+The model parameters were then used to simulate Monte Carlo protests for the year 2025. By considering the population and other variables, a 95\% confidence interval for the expected number of protests in 2025 was generated.
+
+\subsection{Results}
+The model results, as shown in Figure \ref{fig:model_results}, provided insight into the relationships between independent variables and the expected number of protests. Significant variables such as population and specific provinces were identified.
+
+The bootstrapped confidence intervals, displayed in Figure \ref{fig:coefficients}, highlighted the significant variables, aiding in understanding their impact on social unrest.
+
+The Monte Carlo simulation for 2025, illustrated in Figure \ref{fig:monte_carlo}, gives a range of expected protests based on the model parameters and population considerations.
+
+Overall, this study attempts to provide a framework for modeling and understanding social unrest, potentially offering insights into the number of protests of each province in Canada for the year 2025
+
+
+\end{document}
