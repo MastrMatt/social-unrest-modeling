@@ -13,7 +13,7 @@ The goal is to capture the relationship between various independent variables (y
 
 ## Files in the Project
 
--   `protestData.csv`: Contains the dataset used for analysis
+-   `protestData.csv`: Contains the dataset used for analysis, provided by Canadian government
 -   `fitModel.py`: Python script for fitting the negative binomial regression model
 -   `social-unrest.tex`: LaTeX file containing the project report
 -   `social-unrest.pdf`: PDF version of the project report
